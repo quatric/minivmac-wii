@@ -10,8 +10,9 @@ permissions:
   contents: read
 
 env:
-  # The in-app updater (libwiiupdate) checks the releases of the repository
-  # it was built from: the Plus on this one, the II on <this one>-ii.
+  # The in-app updaters (libwiiupdate, libwiiuupdate) check the releases of
+  # the repository they were built from: the Plus on this one, the II on
+  # <this one>-ii. Each release carries the Wii and the Wii U zip.
   UPDATE_OWNER: ${{ github.repository_owner }}
   UPDATE_REPO: ${{ github.event.repository.name }}
 
@@ -45,10 +46,42 @@ jobs:
           if-no-files-found: error
           path: wii/dist/*.zip
 
+  wiiu:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitppc:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [Plus, II]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install zip and wiiu-sdl2
+        run: |
+          apt-get update -qq && apt-get install -y -qq --no-install-recommends zip
+          # the image usually ships it already
+          dkp-pacman -Q wiiu-sdl2 || dkp-pacman -Sy --noconfirm --needed wiiu-sdl2
+      - name: Build and package
+        shell: bash
+        run: |
+          args=(MODEL=${{ matrix.model }} UPDATE_OWNER="$UPDATE_OWNER" UPDATE_REPO="$UPDATE_REPO")
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" == v* ]]; then
+            args+=(VERSION="${GITHUB_REF_NAME#v}")
+          fi
+          make -C wiiu libs
+          make -C wiiu -j"$(nproc)" "${args[@]}"
+          make -C wiiu "${args[@]}" dist-model
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-wiiu-${{ matrix.model }}
+          if-no-files-found: error
+          path: wiiu/dist/*.zip
+
   # Every push to the default branch refreshes the "latest" release (the
   # updater ignores that tag); v* tags get their own release.
   release:
-    needs: wii
+    needs: [wii, wiiu]
     if: github.event_name == 'push' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
@@ -84,7 +117,9 @@ jobs:
           body: |
             Latest build of Mini vMac Wii from ${{ github.sha }}.
 
-            Extract MinivMacWii-*-hbc.zip (Macintosh Plus, needs vMac.ROM) and/or MinivMacWiiII-*-hbc.zip (Macintosh II, needs MacII.ROM) to the root of your SD card or USB drive, put the ROM in the app's folder and open it from the Homebrew Channel.
+            Wii: extract MinivMacWii-*-hbc.zip (Macintosh Plus, needs vMac.ROM) and/or MinivMacWiiII-*-hbc.zip (Macintosh II, needs MacII.ROM) to the root of your SD card or USB drive, put the ROM in the app's folder and open it from the Homebrew Channel.
+
+            Wii U (Aroma): extract MinivMacWiiU-*-wiiu.zip and/or MinivMacWiiUII-*-wiiu.zip to the root of your SD card, put the ROM in sd:/wiiu/apps/MinivMacWiiU/ (or MinivMacWiiUII) and open it from the Wii U Menu.
           files: out/*.zip
       # Only the Plus zip goes on this repository's version releases: the
       # updater installs the first app folder of the zip it picks.
@@ -97,8 +132,12 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           body: |
-            Extract MinivMacWii-*-hbc.zip to the root of your SD card or USB drive, put vMac.ROM in sd:/apps/MinivMacWii/ and open Mini vMac Wii from the Homebrew Channel.
-          files: out/MinivMacWii-*-hbc.zip
+            Wii: extract MinivMacWii-*-hbc.zip to the root of your SD card or USB drive, put vMac.ROM in sd:/apps/MinivMacWii/ and open Mini vMac Wii from the Homebrew Channel.
+
+            Wii U (Aroma): extract MinivMacWiiU-*-wiiu.zip to the root of your SD card, put vMac.ROM in sd:/wiiu/apps/MinivMacWiiU/ and open Mini vMac Wii U from the Wii U Menu.
+          files: |
+            out/MinivMacWii-*-hbc.zip
+            out/MinivMacWiiU-*-wiiu.zip
       - name: Publish tagged Macintosh II release
         if: github.ref_type == 'tag' && env.II_TOKEN != ''
         uses: softprops/action-gh-release@v2
@@ -112,5 +151,9 @@ jobs:
           body: |
             Built from ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}.
 
-            Extract MinivMacWiiII-*-hbc.zip to the root of your SD card or USB drive, put MacII.ROM in sd:/apps/MinivMacWiiII/ and open Mini vMac Wii II from the Homebrew Channel.
-          files: out/MinivMacWiiII-*-hbc.zip
+            Wii: extract MinivMacWiiII-*-hbc.zip to the root of your SD card or USB drive, put MacII.ROM in sd:/apps/MinivMacWiiII/ and open Mini vMac Wii II from the Homebrew Channel.
+
+            Wii U (Aroma): extract MinivMacWiiUII-*-wiiu.zip to the root of your SD card, put MacII.ROM in sd:/wiiu/apps/MinivMacWiiUII/ and open Mini vMac Wii U II from the Wii U Menu.
+          files: |
+            out/MinivMacWiiII-*-hbc.zip
+            out/MinivMacWiiUII-*-wiiu.zip

@@ -1,3 +1,16 @@
+# Mini vMac for the Wii and Wii U
+
+This repository holds the 3DS port of Mini vMac and, built on it, ports to
+the Nintendo Wii and Wii U:
+
+* [wii/README.md](wii/README.md): Homebrew Channel (libogc, GX)
+* [wiiu/README.md](wiiu/README.md): Aroma (wut, SDL2)
+
+Both type text through [libwiiosk](https://github.com/quatric/libwiiosk), the
+Wii-style software keyboard: press + and type.
+
+The 3DS build notes follow.
+
 # BUILDING
 3dsconf.sh Is a wrapper around the main Mini vMac source configuration tool.
 It contains the options common to the 3DS port and any options passed to it will be passed on to the Mini vMac configuration tool.

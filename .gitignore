@@ -13,3 +13,10 @@ wii/build/
 wii/dist/
 wii/*.dol
 wii/*.elf
+
+# Wii U
+wiiu/build/
+wiiu/dist/
+wiiu/*.rpx
+wiiu/*.wuhb
+wiiu/*.lst
