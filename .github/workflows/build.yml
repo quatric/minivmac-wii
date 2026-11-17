@@ -1,0 +1,116 @@
+name: Build
+
+on:
+  push:
+    tags-ignore: [latest]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The in-app updater (libwiiupdate) checks the releases of the repository
+  # it was built from: the Plus on this one, the II on <this one>-ii.
+  UPDATE_OWNER: ${{ github.repository_owner }}
+  UPDATE_REPO: ${{ github.event.repository.name }}
+
+jobs:
+  wii:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitppc:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [Plus, II]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install zip
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends zip
+      - name: Build and package
+        shell: bash
+        run: |
+          args=(MODEL=${{ matrix.model }} UPDATE_OWNER="$UPDATE_OWNER" UPDATE_REPO="$UPDATE_REPO")
+          # A v1.2.0 tag builds version 1.2.0, which the updater compares with newer tags.
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" == v* ]]; then
+            args+=(VERSION="${GITHUB_REF_NAME#v}")
+          fi
+          make -C wii -j"$(nproc)" "${args[@]}"
+          make -C wii "${args[@]}" dist-model
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.model }}
+          if-no-files-found: error
+          path: wii/dist/*.zip
+
+  # Every push to the default branch refreshes the "latest" release (the
+  # updater ignores that tag); v* tags get their own release.
+  release:
+    needs: wii
+    if: github.event_name == 'push' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      # Optional: a token with contents:write on <owner>/<repo>-ii, so the
+      # Macintosh II build is released where its updater looks.
+      II_TOKEN: ${{ secrets.II_RELEASE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: out
+      - name: Move the latest tag
+        if: startsWith(github.ref, 'refs/heads/')
+        run: |
+          git tag -f latest
+          git push -f origin latest
+      - name: Publish latest release
+        if: startsWith(github.ref, 'refs/heads/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Mini vMac Wii (latest)
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
+          body: |
+            Latest build of Mini vMac Wii from ${{ github.sha }}.
+
+            Extract MinivMacWii-*-hbc.zip (Macintosh Plus, needs vMac.ROM) and/or MinivMacWiiII-*-hbc.zip (Macintosh II, needs MacII.ROM) to the root of your SD card or USB drive, put the ROM in the app's folder and open it from the Homebrew Channel.
+          files: out/*.zip
+      # Only the Plus zip goes on this repository's version releases: the
+      # updater installs the first app folder of the zip it picks.
+      - name: Publish tagged release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Mini vMac Wii ${{ github.ref_name }}
+          make_latest: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            Extract MinivMacWii-*-hbc.zip to the root of your SD card or USB drive, put vMac.ROM in sd:/apps/MinivMacWii/ and open Mini vMac Wii from the Homebrew Channel.
+          files: out/MinivMacWii-*-hbc.zip
+      - name: Publish tagged Macintosh II release
+        if: github.ref_type == 'tag' && env.II_TOKEN != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ github.repository }}-ii
+          token: ${{ env.II_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          name: Mini vMac Wii II ${{ github.ref_name }}
+          make_latest: true
+          fail_on_unmatched_files: true
+          body: |
+            Built from ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}.
+
+            Extract MinivMacWiiII-*-hbc.zip to the root of your SD card or USB drive, put MacII.ROM in sd:/apps/MinivMacWiiII/ and open Mini vMac Wii II from the Homebrew Channel.
+          files: out/MinivMacWiiII-*-hbc.zip

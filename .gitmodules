@@ -1,0 +1,6 @@
+[submodule "wii/libwiiupdate"]
+	path = wii/libwiiupdate
+	url = https://github.com/quatric/libwiiupdate.git
+[submodule "wii/libwiiinput"]
+	path = wii/libwiiinput
+	url = https://github.com/quatric/libwiiinput.git

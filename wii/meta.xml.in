@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+	<name>@NAME@</name>
+	<version>@VERSION@</version>
+	<release_date>@DATE@</release_date>
+	<short_description>@MAC@ emulator</short_description>
+	<long_description>Mini vMac emulating a @MAC@, filling the whole TV screen.
+
+Put @ROM@ in sd:/apps/@FOLDER@/ along with your disk images (disk1.dsk, disk2.dsk, ... are inserted at start; HOME opens a menu to insert others).
+
+Wii Remote: point and press A or B to use the mouse, D-Pad for arrow keys, 1 = command, 2 = option, + = on-screen keyboard, - = display mode, HOME = menu. Nunchuk, Classic Controller, GameCube pads and USB keyboards and mice work too.</long_description>
+	<ahb_access/>
+</app>

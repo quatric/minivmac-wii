@@ -7,3 +7,9 @@ release/
 *.elf
 *.smdh
 
+
+# Wii
+wii/build/
+wii/dist/
+wii/*.dol
+wii/*.elf
