@@ -6,8 +6,8 @@
 #   make MODEL=II         Macintosh II, 640x480 256 colours (MacII.ROM)
 #   make dist             Homebrew Channel folders and zip in dist/
 #
-# Needs devkitPPC and libogc. libwiiupdate and libwiiinput are git
-# submodules: git submodule update --init
+# Needs devkitPPC and libogc. libwiiupdate, libwiiinput and libwiiosk are
+# git submodules: git submodule update --init
 #---------------------------------------------------------------------------------
 .SUFFIXES:
 
@@ -30,6 +30,7 @@ MODEL         ?=
 SRC           := ../src
 WIIINPUT      := libwiiinput
 WIIUPDATE     := libwiiupdate
+WIIOSK        := libwiiosk
 
 ifeq ($(MODEL),)
 #---------------------------------------------------------------------------------
@@ -37,7 +38,12 @@ ifeq ($(MODEL),)
 #---------------------------------------------------------------------------------
 all: $(MODELS)
 
-$(MODELS):
+# the libraries are built once, before the models (which build in parallel)
+libs:
+	@$(MAKE) --no-print-directory -C $(WIIUPDATE)
+	@$(MAKE) --no-print-directory -C $(WIIOSK)
+
+$(MODELS): libs
 	@$(MAKE) --no-print-directory MODEL=$@
 
 dist: $(MODELS)
@@ -46,8 +52,9 @@ dist: $(MODELS)
 clean:
 	@rm -rf build dist *.elf *.dol *.map
 	@$(MAKE) --no-print-directory -C $(WIIUPDATE) clean
+	@$(MAKE) --no-print-directory -C $(WIIOSK) clean
 
-.PHONY: all dist clean $(MODELS)
+.PHONY: all libs dist clean $(MODELS)
 
 else
 #---------------------------------------------------------------------------------
@@ -85,6 +92,7 @@ OBJS          := $(addprefix $(BUILD)/,$(addsuffix .o,$(EMU_OBJS))) \
                  $(BUILD)/OSGLUWII.o $(INPUT_OBJS)
 
 INCLUDE       := -I$(CFG) -I$(SRC) -I$(WIIINPUT)/include -I$(WIIUPDATE)/include \
+                 -I$(WIIOSK)/include \
                  -I$(LIBOGC_INC) $(foreach dir,$(PORTLIBS),-I$(dir)/include)
 
 CFLAGS        := -O2 -Wall -Wno-unused-function -Wno-unused-variable \
@@ -93,9 +101,9 @@ GLUEFLAGS     := -DAPP_VERSION=\"$(VERSION)\" -DUPDATE_OWNER=\"$(UPDATE_OWNER)\"
                  -DUPDATE_REPO=\"$(MODEL_REPO)\" -DAPP_FOLDER=\"$(APP_FOLDER)\" \
                  -DAPP_TITLE="\"$(APP_TITLE)\""
 LDFLAGS       := $(MACHDEP) -Wl,-Map,$(BUILD)/$(TARGET).map
-LIBS          := -L$(WIIUPDATE)/lib -L$(LIBOGC_LIB) \
+LIBS          := -L$(WIIUPDATE)/lib -L$(WIIOSK)/lib -L$(LIBOGC_LIB) \
                  $(foreach dir,$(PORTLIBS),-L$(dir)/lib) \
-                 -lwiiupdate -lwiikeyboard -lasnd -lfat -lwiiuse -lbte -logc -lm
+                 -lwiiupdate -lwiiosk -lwiikeyboard -lasnd -lfat -lwiiuse -lbte -logc -lm
 
 all: $(TARGET).dol
 
@@ -103,12 +111,15 @@ $(TARGET).dol: $(BUILD)/$(TARGET).elf
 	@echo output ... $@
 	@elf2dol $< $@
 
-$(BUILD)/$(TARGET).elf: $(OBJS) $(WIIUPDATE)/lib/libwiiupdate.a
+$(BUILD)/$(TARGET).elf: $(OBJS) $(WIIUPDATE)/lib/libwiiupdate.a $(WIIOSK)/lib/libwiiosk.a
 	@echo linking ... $(notdir $@)
 	@$(CC) $(OBJS) $(LDFLAGS) $(LIBS) -o $@
 
 $(WIIUPDATE)/lib/libwiiupdate.a:
 	@$(MAKE) --no-print-directory -C $(WIIUPDATE)
+
+$(WIIOSK)/lib/libwiiosk.a:
+	@$(MAKE) --no-print-directory -C $(WIIOSK)
 
 # Rebuild the glue when VERSION, the update repository or EXTRA_CFLAGS change.
 GLUESTAMP := $(BUILD)/glueflags

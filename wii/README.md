@@ -8,6 +8,9 @@ TVs alike.
 * **Input** comes from [libwiiinput](https://github.com/quatric/libwiiinput):
   Wii Remote (IR pointer), Nunchuk, Classic Controller, GameCube pads, USB
   keyboards and USB mice.
+* **Typing** uses [libwiiosk](https://github.com/quatric/libwiiosk), the
+  Wii-style software keyboard: press + and type, and the text is typed into
+  the Mac when you press OK.
 * **Updates** come from [libwiiupdate](https://github.com/quatric/libwiiupdate):
   at start the app checks the GitHub releases in the background and, when a
   newer one is out, offers to install it over itself.
@@ -39,18 +42,35 @@ No ROM? The app starts anyway and HOME > *Load ROM...* picks one.
 | D-Pad | arrow keys |
 | 1 (Nunchuk C) | command |
 | 2 | option |
-| + | show/hide the on-screen keyboard |
+| + | type text (libwiiosk keyboard); while text is being typed, + stops it |
 | - | display mode: fill screen / keep aspect / integer scale |
-| HOME | menu: insert disk, display, smoothing, speed, interrupt, reset, quit |
+| HOME | menu: insert disk, display, smoothing, speed, type text, Mac keyboard, interrupt, reset, quit |
 | Nunchuk / Classic / GameCube stick | move the mouse |
 
-A Classic Controller or GameCube pad works through the same layout. On a USB
+A Classic Controller or GameCube pad works through the same layout (on a
+GameCube pad R or Z is +, Start is HOME). On a USB
 keyboard Alt is command and the Windows key is option; Ctrl is Mini vMac's
 own control key (Ctrl+H lists its commands). A USB mouse moves the pointer
 directly.
 
-The on-screen keyboard is used by pointing and pressing A. Shift, option,
-command and ctrl apply to the next key; caps locks.
+### Typing text
+
++ opens the Wii-style keyboard from libwiiosk (the console's language picks
+its layout). Type with the pointer, the D-Pad and A, or a USB keyboard;
+Enter starts a new line. OK (or + on the keyboard) closes it and the text is
+typed into the Mac as if on a US Mac keyboard, about 30 characters a second:
+capitals and symbols with shift, accented letters through the option dead
+keys (option-e then e for é) and Mac Roman symbols (€, ©, ™, ...) with
+option. Characters the Mac cannot type are skipped. Quit or HOME closes the
+keyboard without typing. Press + again while the text is still being typed
+to stop it.
+
+### Mac keyboard
+
+For keys the text keyboard does not have (command shortcuts, escape, arrows,
+held modifiers), HOME > *Show Mac keyboard* puts a Mac keyboard over the
+screen. Point and press A. Shift, option, command and ctrl apply to the next
+key; caps locks. + hides it again.
 
 Display mode, smoothing and speed are saved to `settings.txt` in the app
 folder. The power button (console or Wii Remote) turns the Wii off, the reset

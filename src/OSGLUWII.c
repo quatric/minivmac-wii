@@ -40,6 +40,8 @@
 
 #include <input_wii.h>
 #include <wiiupdate.h>
+#include <wiiosk.h>
+#include <wiiosk_input_wii.h>
 
 #ifndef APP_VERSION
 #define APP_VERSION "1.0.0"
@@ -677,10 +679,46 @@ LOCALPROC BuildFontTexture(void)
 		GX_FALSE, GX_FALSE, GX_ANISO_1);
 }
 
-LOCALFUNC blnr Screen_Init(void)
+/* The GX state our drawing needs. libwiiosk's OSK_Draw() changes it, so
+   it is set again after the keyboard has been drawn. */
+LOCALPROC SetupGXDrawState(void)
 {
 	Mtx44 proj;
 	Mtx ident;
+
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
+
+	GX_SetNumChans(1);
+	GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_REG, GX_SRC_VTX,
+		GX_LIGHTNULL, GX_DF_NONE, GX_AF_NONE);
+	GX_SetNumTexGens(1);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+	GX_SetNumTevStages(1);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+	GX_SetTevOp(GX_TEVSTAGE0, GX_MODULATE);
+
+	GX_SetZMode(GX_FALSE, GX_ALWAYS, GX_FALSE);
+	GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA,
+		GX_LO_CLEAR);
+	GX_SetAlphaUpdate(GX_TRUE);
+	GX_SetColorUpdate(GX_TRUE);
+
+	guMtxIdentity(ident);
+	GX_LoadPosMtxImm(ident, GX_PNMTX0);
+	GX_SetCurrentMtx(GX_PNMTX0);
+	guOrtho(proj, 0, VirtH, 0, VirtW, 0, 1000);
+	GX_LoadProjectionMtx(proj, GX_ORTHOGRAPHIC);
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+}
+
+LOCALFUNC blnr Screen_Init(void)
+{
 	f32 yscale;
 	u32 xfbHeight;
 	int i;
@@ -736,34 +774,7 @@ LOCALFUNC blnr Screen_Init(void)
 	GX_CopyDisp(xfb[0], GX_TRUE);
 	GX_SetDispCopyGamma(GX_GM_1_0);
 
-	GX_ClearVtxDesc();
-	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
-
-	GX_SetNumChans(1);
-	GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_REG, GX_SRC_VTX,
-		GX_LIGHTNULL, GX_DF_NONE, GX_AF_NONE);
-	GX_SetNumTexGens(1);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
-	GX_SetNumTevStages(1);
-	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
-	GX_SetTevOp(GX_TEVSTAGE0, GX_MODULATE);
-
-	GX_SetZMode(GX_FALSE, GX_ALWAYS, GX_FALSE);
-	GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA,
-		GX_LO_CLEAR);
-	GX_SetAlphaUpdate(GX_TRUE);
-	GX_SetColorUpdate(GX_TRUE);
-
-	guMtxIdentity(ident);
-	GX_LoadPosMtxImm(ident, GX_PNMTX0);
-	GX_SetCurrentMtx(GX_PNMTX0);
-	guOrtho(proj, 0, VirtH, 0, VirtW, 0, 1000);
-	GX_LoadProjectionMtx(proj, GX_ORTHOGRAPHIC);
+	SetupGXDrawState();
 
 	ScreenTex = (u16 *)memalign(32, TexW * TexH * sizeof(u16));
 	if (NULL == ScreenTex) {
@@ -893,6 +904,7 @@ LOCALPROC DrawPointer(f32 x, f32 y)
 LOCALVAR blnr MenuOpen = falseblnr;
 LOCALVAR blnr BrowserOpen = falseblnr;
 LOCALVAR blnr OskVisible = falseblnr;
+LOCALVAR blnr TypeOpen = falseblnr;   /* libwiiosk text keyboard */
 LOCALVAR blnr PopupOpen = falseblnr;
 LOCALVAR wiiupdate_popup Popup;
 
@@ -917,7 +929,7 @@ LOCALPROC ShowToast(const char *s)
 
 LOCALFUNC blnr UIPausesEmulation(void)
 {
-	return MenuOpen || BrowserOpen || PopupOpen;
+	return MenuOpen || BrowserOpen || PopupOpen || TypeOpen;
 }
 
 /* --- Mac key state, merged from several sources --- */
@@ -925,7 +937,8 @@ LOCALFUNC blnr UIPausesEmulation(void)
 enum {
 	kSrcPad = 1 << 0,
 	kSrcUSB = 1 << 1,
-	kSrcOsk = 1 << 2
+	kSrcOsk = 1 << 2,
+	kSrcType = 1 << 3
 };
 
 LOCALVAR u8 KeySources[256];
@@ -1320,6 +1333,321 @@ LOCALPROC DrawOsk(void)
 }
 
 /* ======================================================================
+	Typing text (libwiiosk)
+
+	The + button opens the Wii-style software keyboard from libwiiosk.
+	When it is confirmed, the text is typed into the Mac one key stroke at
+	a time, as a US keyboard would: shift for capitals and symbols, option
+	for the Mac Roman extras and option dead keys for accented letters.
+   ====================================================================== */
+
+/* modifier bits of a stroke */
+#define TS_Shift 1
+#define TS_Option 2
+
+typedef struct {
+	u8 mkc;
+	u8 mods;
+} TypeStroke;
+
+#define TypeQueueSz 4096
+LOCALVAR TypeStroke TypeQueue[TypeQueueSz];
+LOCALVAR int TypeQueueIn = 0;
+LOCALVAR int TypeQueueOut = 0;
+LOCALVAR blnr TypeKeyDown = falseblnr;   /* a stroke is pressed */
+LOCALVAR TypeStroke TypeCur;
+
+LOCALVAR osk_keyboard *TypeOsk = NULL;
+LOCALVAR blnr TypeSoundReady = falseblnr;
+
+LOCALFUNC blnr TypePush(u8 mkc, u8 mods)
+{
+	int next = (TypeQueueIn + 1) % TypeQueueSz;
+
+	if (next == TypeQueueOut) {
+		return falseblnr;
+	}
+	TypeQueue[TypeQueueIn].mkc = mkc;
+	TypeQueue[TypeQueueIn].mods = mods;
+	TypeQueueIn = next;
+
+	return trueblnr;
+}
+
+/* US layout: printable ASCII to a key and whether shift is needed */
+LOCALFUNC blnr AsciiStroke(u32 c, u8 *mkc, u8 *mods)
+{
+	static const char *const unshifted = "`1234567890-=[]\\;',./";
+	static const char *const shifted = "~!@#$%^&*()_+{}|:\"<>?";
+	static const u8 keys[] = {
+		MKC_Grave, MKC_1, MKC_2, MKC_3, MKC_4, MKC_5, MKC_6, MKC_7,
+		MKC_8, MKC_9, MKC_0, MKC_Minus, MKC_Equal, MKC_LeftBracket,
+		MKC_RightBracket, MKC_BackSlash, MKC_SemiColon, MKC_SingleQuote,
+		MKC_Comma, MKC_Period, MKC_Slash
+	};
+	static const u8 letters[26] = {
+		MKC_A, MKC_B, MKC_C, MKC_D, MKC_E, MKC_F, MKC_G, MKC_H, MKC_I,
+		MKC_J, MKC_K, MKC_L, MKC_M, MKC_N, MKC_O, MKC_P, MKC_Q, MKC_R,
+		MKC_S, MKC_T, MKC_U, MKC_V, MKC_W, MKC_X, MKC_Y, MKC_Z
+	};
+	const char *p;
+
+	*mods = 0;
+	if ((c >= 'a') && (c <= 'z')) {
+		*mkc = letters[c - 'a'];
+		return trueblnr;
+	}
+	if ((c >= 'A') && (c <= 'Z')) {
+		*mkc = letters[c - 'A'];
+		*mods = TS_Shift;
+		return trueblnr;
+	}
+	switch (c) {
+		case ' ': *mkc = MKC_Space; return trueblnr;
+		case '\n': *mkc = MKC_Return; return trueblnr;
+		case '\t': *mkc = MKC_Tab; return trueblnr;
+		default: break;
+	}
+	if ((c > ' ') && (c < 0x7F)) {
+		p = strchr(unshifted, (int)c);
+		if (NULL != p) {
+			*mkc = keys[p - unshifted];
+			return trueblnr;
+		}
+		p = strchr(shifted, (int)c);
+		if (NULL != p) {
+			*mkc = keys[p - shifted];
+			*mods = TS_Shift;
+			return trueblnr;
+		}
+	}
+
+	return falseblnr;
+}
+
+/* Characters outside ASCII that a US Mac keyboard types: either one
+   option stroke ('dead' == 0) or an option dead key followed by the base
+   letter. */
+typedef struct {
+	u16 cp;
+	char key;     /* ASCII key pressed with option (shifted form = shift) */
+	char base;    /* letter after the dead key, or 0 */
+} TypeExtra;
+
+LOCALVAR const TypeExtra TypeExtras[] = {
+	/* option dead keys: acute e, grave `, circumflex i, umlaut u, tilde n */
+	{ 0xE1, 'e', 'a' }, { 0xE9, 'e', 'e' }, { 0xED, 'e', 'i' },
+	{ 0xF3, 'e', 'o' }, { 0xFA, 'e', 'u' }, { 0xC1, 'e', 'A' },
+	{ 0xC9, 'e', 'E' }, { 0xCD, 'e', 'I' }, { 0xD3, 'e', 'O' },
+	{ 0xDA, 'e', 'U' },
+	{ 0xE0, '`', 'a' }, { 0xE8, '`', 'e' }, { 0xEC, '`', 'i' },
+	{ 0xF2, '`', 'o' }, { 0xF9, '`', 'u' }, { 0xC0, '`', 'A' },
+	{ 0xC8, '`', 'E' }, { 0xCC, '`', 'I' }, { 0xD2, '`', 'O' },
+	{ 0xD9, '`', 'U' },
+	{ 0xE2, 'i', 'a' }, { 0xEA, 'i', 'e' }, { 0xEE, 'i', 'i' },
+	{ 0xF4, 'i', 'o' }, { 0xFB, 'i', 'u' }, { 0xC2, 'i', 'A' },
+	{ 0xCA, 'i', 'E' }, { 0xCE, 'i', 'I' }, { 0xD4, 'i', 'O' },
+	{ 0xDB, 'i', 'U' },
+	{ 0xE4, 'u', 'a' }, { 0xEB, 'u', 'e' }, { 0xEF, 'u', 'i' },
+	{ 0xF6, 'u', 'o' }, { 0xFC, 'u', 'u' }, { 0xFF, 'u', 'y' },
+	{ 0xC4, 'u', 'A' }, { 0xCB, 'u', 'E' }, { 0xCF, 'u', 'I' },
+	{ 0xD6, 'u', 'O' }, { 0xDC, 'u', 'U' }, { 0x178, 'u', 'Y' },
+	{ 0xE3, 'n', 'a' }, { 0xF1, 'n', 'n' }, { 0xF5, 'n', 'o' },
+	{ 0xC3, 'n', 'A' }, { 0xD1, 'n', 'N' }, { 0xD5, 'n', 'O' },
+
+	/* single option strokes */
+	{ 0xE7, 'c', 0 }, { 0xC7, 'C', 0 }, { 0xDF, 's', 0 },
+	{ 0xE5, 'a', 0 }, { 0xC5, 'A', 0 }, { 0xE6, '\'', 0 },
+	{ 0xC6, '"', 0 }, { 0xF8, 'o', 0 }, { 0xD8, 'O', 0 },
+	{ 0x153, 'q', 0 }, { 0x152, 'Q', 0 }, { 0xBF, '?', 0 },
+	{ 0xA1, '1', 0 }, { 0xA3, '3', 0 }, { 0xA5, 'y', 0 },
+	{ 0xA9, 'g', 0 }, { 0xAE, 'r', 0 }, { 0x2122, '2', 0 },
+	{ 0xB0, '*', 0 }, { 0x2022, '8', 0 }, { 0xA2, '4', 0 },
+	{ 0xA7, '6', 0 }, { 0xB6, '7', 0 }, { 0xAB, '\\', 0 },
+	{ 0xBB, '|', 0 }, { 0x201C, '[', 0 }, { 0x201D, '{', 0 },
+	{ 0x2018, ']', 0 }, { 0x2019, '}', 0 }, { 0x2026, ';', 0 },
+	{ 0x2013, '-', 0 }, { 0x2014, '_', 0 }, { 0xB1, '+', 0 },
+	{ 0xF7, '/', 0 }, { 0xB5, 'm', 0 }, { 0xAC, 'l', 0 },
+	{ 0x3C0, 'p', 0 }, { 0x221E, '5', 0 }, { 0x2260, '=', 0 },
+	{ 0x2264, ',', 0 }, { 0x2265, '.', 0 }, { 0x20AC, '@', 0 },
+	{ 0xA0, ' ', 0 }
+};
+
+#define TypeNumExtras ((int)(sizeof(TypeExtras) / sizeof(TypeExtras[0])))
+
+/* Queue the strokes for one code point; unknown characters are skipped. */
+LOCALPROC TypeCodePoint(u32 cp)
+{
+	u8 mkc;
+	u8 mods;
+	int i;
+
+	if ('\r' == cp) {
+		return;
+	}
+	if (AsciiStroke(cp, &mkc, &mods)) {
+		(void) TypePush(mkc, mods);
+		return;
+	}
+	for (i = 0; i < TypeNumExtras; ++i) {
+		if (TypeExtras[i].cp == cp) {
+			if (AsciiStroke((u8)TypeExtras[i].key, &mkc, &mods)) {
+				(void) TypePush(mkc, mods | TS_Option);
+			}
+			if ((0 != TypeExtras[i].base)
+				&& AsciiStroke((u8)TypeExtras[i].base, &mkc, &mods))
+			{
+				(void) TypePush(mkc, mods);
+			}
+			return;
+		}
+	}
+}
+
+LOCALPROC TypeUTF8(const char *s)
+{
+	const u8 *p = (const u8 *)s;
+
+	while (0 != *p) {
+		u32 cp = *p++;
+		int more = 0;
+
+		if (cp >= 0xF0) {
+			cp &= 0x07;
+			more = 3;
+		} else if (cp >= 0xE0) {
+			cp &= 0x0F;
+			more = 2;
+		} else if (cp >= 0xC0) {
+			cp &= 0x1F;
+			more = 1;
+		} else if (cp >= 0x80) {
+			continue; /* stray continuation byte */
+		}
+		for (; (more > 0) && ((*p & 0xC0) == 0x80); --more) {
+			cp = (cp << 6) | (*p++ & 0x3F);
+		}
+		if (0 == more) {
+			TypeCodePoint(cp);
+		}
+	}
+}
+
+LOCALFUNC blnr TypePending(void)
+{
+	return TypeKeyDown || (TypeQueueIn != TypeQueueOut);
+}
+
+LOCALPROC TypeSetMods(u8 mods, blnr down)
+{
+	if (mods & TS_Shift) {
+		MacKeySet(MKC_Shift, kSrcType, down);
+	}
+	if (mods & TS_Option) {
+		MacKeySet(MKC_Option, kSrcType, down);
+	}
+}
+
+/* One step per video field: press a stroke, release it on the next. Waits
+   while Mini vMac's event queue is nearly full. */
+LOCALPROC TypeStep(void)
+{
+	if (TypeKeyDown) {
+		MacKeySet(TypeCur.mkc, kSrcType, falseblnr);
+		TypeSetMods(TypeCur.mods, falseblnr);
+		TypeKeyDown = falseblnr;
+		return;
+	}
+	if (TypeQueueIn == TypeQueueOut) {
+		return;
+	}
+	if ((ui4r)(MyEvtQIn - MyEvtQOut) > MyEvtQSz - 6) {
+		return;
+	}
+	TypeCur = TypeQueue[TypeQueueOut];
+	TypeQueueOut = (TypeQueueOut + 1) % TypeQueueSz;
+	TypeSetMods(TypeCur.mods, trueblnr);
+	MacKeySet(TypeCur.mkc, kSrcType, trueblnr);
+	TypeKeyDown = trueblnr;
+}
+
+LOCALPROC TypeCancelPending(void)
+{
+	TypeQueueIn = TypeQueueOut = 0;
+	TypeKeyDown = falseblnr;
+	MacKeysReleaseSource(kSrcType);
+}
+
+LOCALPROC TypeOpenKeyboard(void)
+{
+	osk_config cfg;
+	input_key_event ev;
+
+	if (TypeOpen) {
+		return;
+	}
+
+	OSK_DefaultConfig(&cfg);
+	OSK_UseSystemLanguage(&cfg);
+	cfg.title = "Type into the Mac";
+	cfg.max_chars = 2048;
+	cfg.screen_width = VirtW;
+	cfg.screen_height = VirtH;
+	cfg.flags |= OSK_FLAG_MULTILINE | OSK_FLAG_PREDICT_OFF;
+	if (WideScreen) {
+		cfg.flags |= OSK_FLAG_WIDESCREEN;
+	}
+
+	if (! TypeSoundReady) {
+		OSK_InitSound(false); /* ASND is already running */
+		TypeSoundReady = trueblnr;
+	}
+
+	TypeOsk = OSK_Create(&cfg);
+	if (NULL == TypeOsk) {
+		ShowToast("Could not open the keyboard");
+		return;
+	}
+
+	/* keys typed on a USB keyboard before now are not for the box */
+	while (INPUT_KeyPop(&ev)) {
+	}
+
+	if (OskVisible) {
+		OskHide();
+	}
+	TypeOpen = trueblnr;
+}
+
+LOCALPROC TypeCloseKeyboard(blnr typeIt)
+{
+	if (! TypeOpen) {
+		return;
+	}
+	if (typeIt) {
+		TypeUTF8(OSK_GetText(TypeOsk));
+	}
+	OSK_Destroy(TypeOsk);
+	TypeOsk = NULL;
+	TypeOpen = falseblnr;
+}
+
+/* Feed the keyboard one frame of input; true while it stays open. */
+LOCALPROC TypeUpdateKeyboard(void)
+{
+	osk_input in;
+	osk_status st;
+
+	OSK_ReadInputWii(&in);
+	st = OSK_Update(TypeOsk, &in);
+	if (OSK_STATUS_DONE == st) {
+		TypeCloseKeyboard(trueblnr);
+	} else if (OSK_STATUS_CANCELLED == st) {
+		TypeCloseKeyboard(falseblnr);
+	}
+}
+
+/* ======================================================================
 	File browser (insert disk image / ROM)
    ====================================================================== */
 
@@ -1582,6 +1910,7 @@ enum {
 	kMenuDisplay,
 	kMenuSmoothing,
 	kMenuSpeed,
+	kMenuType,
 	kMenuKeyboard,
 	kMenuInterrupt,
 	kMenuReset,
@@ -1631,8 +1960,11 @@ LOCALPROC MenuItemText(int i, char *buf, size_t n)
 		case kMenuSpeed:
 			snprintf(buf, n, "Speed:  < %s >", SpeedName());
 			break;
+		case kMenuType:
+			snprintf(buf, n, "Type text...");
+			break;
 		case kMenuKeyboard:
-			snprintf(buf, n, "%s on-screen keyboard",
+			snprintf(buf, n, "%s Mac keyboard (special keys)",
 				OskVisible ? "Hide" : "Show");
 			break;
 		case kMenuInterrupt:
@@ -1714,6 +2046,10 @@ LOCALPROC MenuActivate(void)
 		case kMenuSpeed:
 			MenuChange(1);
 			break;
+		case kMenuType:
+			MenuClose();
+			TypeOpenKeyboard();
+			break;
 		case kMenuKeyboard:
 			if (OskVisible) {
 				OskHide();
@@ -1784,7 +2120,7 @@ LOCALPROC DrawMenu(void)
 
 		DrawText(MenuX + 16, y, "Point + A/B: mouse    D-Pad: arrow keys", c);
 		DrawText(MenuX + 16, y + 18, "1: command  2: option  -: display mode", c);
-		DrawText(MenuX + 16, y + 36, "+: keyboard  Stick: move mouse", c);
+		DrawText(MenuX + 16, y + 36, "+: type text  Stick: move mouse", c);
 		DrawText(MenuX + 16, y + 54, "USB keyboard and mouse work too.", c);
 		DrawText(MenuX + 16, y + 72, "Alt = command, Windows key = option", c);
 	}
@@ -1832,7 +2168,7 @@ LOCALVAR u32 LastRenderRetrace = 0;
 
 LOCALFUNC blnr OverlayWanted(void)
 {
-	return MenuOpen || BrowserOpen || OskVisible || PopupOpen
+	return MenuOpen || BrowserOpen || OskVisible || PopupOpen || TypeOpen
 		|| ((s32)(ToastUntil - RetraceCount) > 0);
 }
 
@@ -1861,6 +2197,12 @@ LOCALPROC RenderFrame(void)
 		}
 		if (BrowserOpen) {
 			DrawBrowser();
+		}
+		if (TypeOpen) {
+			/* libwiiosk draws over the whole screen with its own GX state */
+			OSK_Draw(TypeOsk);
+			SetupGXDrawState();
+			GX_LoadTexObj(&FontTexObj, GX_TEXMAP0);
 		}
 		if (PopupOpen) {
 			DrawPopup();
@@ -2059,6 +2401,8 @@ LOCALFUNC u32 RepeatedDown(u32 down, u32 held)
 LOCALPROC ReleaseEmulatedInputs(void)
 {
 	MacKeysReleaseSource(kSrcPad);
+	MacKeysReleaseSource(kSrcType);
+	TypeKeyDown = falseblnr;
 	OskRelease();
 	MacMouseDown = falseblnr;
 }
@@ -2070,6 +2414,18 @@ LOCALPROC PollInput(void)
 	blnr wasPaused = UIPausesEmulation();
 
 	INPUT_Update();
+
+#ifdef TEST_SHOW_TYPE
+	{
+		/* emulator test runs: open the text keyboard from the start */
+		static blnr opened = falseblnr;
+
+		if (! opened) {
+			opened = trueblnr;
+			TypeOpenKeyboard();
+		}
+	}
+#endif
 
 	down = INPUT_PadsDown();
 	held = INPUT_PadsHeld();
@@ -2095,7 +2451,13 @@ LOCALPROC PollInput(void)
 		}
 	}
 
-	if (! PopupOpen) {
+	if (TypeOpen && ! PopupOpen) {
+		TypeUpdateKeyboard();
+		down = 0;
+		held = 0;
+	}
+
+	if ((! PopupOpen) && (! TypeOpen)) {
 		if (down & WPAD_BUTTON_HOME) {
 			if (MenuOpen) {
 				MenuClose();
@@ -2183,11 +2545,16 @@ LOCALPROC PollInput(void)
 
 	/* --- normal emulation input --- */
 
+	TypeStep();
+
 	if (down & WPAD_BUTTON_PLUS) {
 		if (OskVisible) {
 			OskHide();
+		} else if (TypePending()) {
+			TypeCancelPending();
+			ShowToast("Typing stopped");
 		} else {
-			OskVisible = trueblnr;
+			TypeOpenKeyboard();
 		}
 	}
 	if (down & WPAD_BUTTON_MINUS) {
@@ -3075,6 +3442,7 @@ LOCALFUNC blnr InitWiiSystem(void)
 	MenuOpen = trueblnr;
 	OskVisible = trueblnr;
 #endif
+
 
 	WIIUPDATE_SetAppPath((my_argc > 0) ? my_argv[0] : NULL);
 	WIIUPDATE_SetUpdateFiles(updateFiles);
