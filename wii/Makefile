@@ -21,7 +21,7 @@ endif
 
 include $(DEVKITPPC)/wii_rules
 
-VERSION       ?= 1.0.0
+VERSION       ?= 1.1.0
 UPDATE_OWNER  ?= quatric
 UPDATE_REPO   ?= minivmac-wii
 

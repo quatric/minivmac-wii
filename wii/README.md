@@ -107,7 +107,7 @@ make            # MinivMacWii.dol, every model
 make dist       # dist/apps/MinivMacWii/ and the HBC zip
 ```
 
-Variables: `VERSION` (default `1.0.0`, compared with the release tags),
+Variables: `VERSION` (default `1.1.0`, compared with the release tags),
 `UPDATE_OWNER` (default `quatric`) and `UPDATE_REPO` (default
 `minivmac-wii`).
 

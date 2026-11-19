@@ -19,7 +19,7 @@ export DEVKITPPC ?= $(DEVKITPRO)/devkitPPC
 
 include $(DEVKITPRO)/wut/share/wut_rules
 
-VERSION       ?= 1.0.0
+VERSION       ?= 1.1.0
 UPDATE_OWNER  ?= quatric
 # libwiiuupdate installs the release's Wii U zip over the running app, so
 # each model checks its own repository's releases, as on the Wii.

@@ -44,7 +44,7 @@
 #include <wiiosk_input_wii.h>
 
 #ifndef APP_VERSION
-#define APP_VERSION "1.0.0"
+#define APP_VERSION "1.1.0"
 #endif
 #ifndef UPDATE_OWNER
 #define UPDATE_OWNER "quatric"
