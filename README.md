@@ -3,7 +3,8 @@
 This repository holds the 3DS port of Mini vMac and, built on it, ports to
 the Nintendo Wii and Wii U:
 
-* [wii/README.md](wii/README.md): Homebrew Channel (libogc, GX)
+* [wii/README.md](wii/README.md): Homebrew Channel (libogc, GX), one app
+  with every model: Macintosh 128K, 512Ke, Plus, SE, Classic, II and IIx
 * [wiiu/README.md](wiiu/README.md): Aroma (wut, SDL2)
 
 Both type text through [libwiiosk](https://github.com/quatric/libwiiosk), the

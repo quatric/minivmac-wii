@@ -59,6 +59,23 @@
 #define APP_TITLE "Mini vMac Wii"
 #endif
 
+/*
+	MV_LAUNCHER: this copy of the glue is one model inside the all-in-one
+	app (wii/launcher.c). Its globals are renamed per model at link time,
+	main becomes the model's entry point, and the launcher owns the update
+	check and the choice of model. MODEL_DIR is the model's own folder
+	in the app folder (disk images there are inserted first).
+*/
+#ifdef MV_LAUNCHER
+#include "launcher.h"
+#endif
+
+#ifdef MAC_NAME
+#define MENU_TITLE APP_TITLE " " APP_VERSION " - " MAC_NAME
+#else
+#define MENU_TITLE APP_TITLE " " APP_VERSION
+#endif
+
 /* Virtual screen used for all drawing and for the pointer. GX maps it
    onto the whole EFB, whatever the TV mode. */
 #define VirtW 640
@@ -310,6 +327,16 @@ LOCALFUNC blnr Sony_InsertIth(int i)
 
 		s[4] = '0' + i;
 
+#ifdef MODEL_DIR
+		{
+			char ms[64];
+
+			snprintf(ms, sizeof(ms), MODEL_DIR "/%s", s);
+			if (Sony_Insert1(ms, trueblnr)) {
+				return trueblnr;
+			}
+		}
+#endif
 		v = Sony_Insert1(s, trueblnr);
 	}
 
@@ -336,6 +363,9 @@ LOCALVAR char *rom_path = NULL;
 LOCALFUNC blnr LoadMacRom(void)
 {
 	static const char *const dirs[] = {
+#ifdef MODEL_DIR
+		MODEL_DIR "/",
+#endif
 		"", "sd:/minivmac/", "usb:/minivmac/", "sd:/", "usb:/"
 	};
 	char path[256];
@@ -812,9 +842,30 @@ LOCALPROC Screen_UnInit(void)
 	if (NULL != rmode) {
 		GX_AbortFrame();
 		GX_Flush();
+		VIDEO_SetPostRetraceCallback(NULL);
 		VIDEO_SetBlack(TRUE);
 		VIDEO_Flush();
 		VIDEO_WaitVSync();
+#ifdef MV_LAUNCHER
+		/* the launcher may start this or another model next */
+		{
+			int i;
+
+			VIDEO_WaitVSync();
+			for (i = 0; i < 2; ++i) {
+				if (NULL != xfb[i]) {
+					/* SYS_AllocateFramebuffer is a memalign */
+					free(MEM_K1_TO_K0(xfb[i]));
+					xfb[i] = NULL;
+				}
+			}
+			free(GpFifo);
+			GpFifo = NULL;
+			free(ScreenTex);
+			ScreenTex = NULL;
+			rmode = NULL;
+		}
+#endif
 	}
 }
 
@@ -1922,6 +1973,9 @@ enum {
 	kMenuKeyboard,
 	kMenuInterrupt,
 	kMenuReset,
+#ifdef MV_LAUNCHER
+	kMenuModel,
+#endif
 	kMenuQuit,
 	kMenuResume,
 	kNumMenuItems
@@ -1931,7 +1985,7 @@ LOCALVAR int MenuSel = 0;
 LOCALVAR blnr SettingsChanged = falseblnr;
 
 #define MenuW 440.0f
-#define MenuItemH 24.0f
+#define MenuItemH 22.0f
 #define MenuX ((VirtW - MenuW) / 2)
 #define MenuY 44.0f
 #define MenuItemsY (MenuY + 40)
@@ -1989,6 +2043,11 @@ LOCALPROC MenuItemText(int i, char *buf, size_t n)
 		case kMenuReset:
 			snprintf(buf, n, "Reset the Mac");
 			break;
+#ifdef MV_LAUNCHER
+		case kMenuModel:
+			snprintf(buf, n, "Switch Mac model...");
+			break;
+#endif
 		case kMenuQuit:
 			snprintf(buf, n, "Quit to loader");
 			break;
@@ -2091,6 +2150,13 @@ LOCALPROC MenuActivate(void)
 			WantMacReset = trueblnr;
 			MenuClose();
 			break;
+#ifdef MV_LAUNCHER
+		case kMenuModel:
+			MenuClose();
+			MVL_RequestSwitch();
+			RequestMacOff = trueblnr;
+			break;
+#endif
 		case kMenuQuit:
 			MenuClose();
 			ForceMacOff = trueblnr;
@@ -2123,7 +2189,7 @@ LOCALPROC DrawMenu(void)
 	FillRect(MenuX, MenuY, MenuW, h, RGBA(235, 235, 240, 245));
 	FrameRect(MenuX, MenuY, MenuW, h, 2, RGBA(0, 0, 0, 255));
 	FillRect(MenuX, MenuY, MenuW, 26, RGBA(0, 0, 0, 255));
-	DrawTextCentered(VirtW / 2, MenuY + 5, APP_TITLE " " APP_VERSION,
+	DrawTextCentered(VirtW / 2, MenuY + 5, MENU_TITLE,
 		RGBA(255, 255, 255, 255));
 
 	for (i = 0; i < kNumMenuItems; ++i) {
@@ -3359,6 +3425,18 @@ label_retry:
 	CheckMouseState();
 
 	OnTrueTime = TrueEmulatedTime;
+
+#if defined(MV_LAUNCHER) && defined(TEST_AUTOSWITCH)
+	/* emulator test runs: go back to the launcher after a while */
+	{
+		static ui5r TestTicks = 0;
+
+		if (60 * TEST_AUTOSWITCH == ++TestTicks) {
+			MVL_RequestSwitch();
+			ForceMacOff = trueblnr;
+		}
+	}
+#endif
 }
 
 /* --- platform independent code can be thought of as going here --- */
@@ -3500,9 +3578,13 @@ LOCALFUNC blnr InitWiiSystem(void)
 #endif
 
 
+#ifndef MV_LAUNCHER
 	WIIUPDATE_SetAppPath((my_argc > 0) ? my_argv[0] : NULL);
 	WIIUPDATE_SetUpdateFiles(updateFiles);
 	(void) WIIUPDATE_Start(UPDATE_OWNER, UPDATE_REPO, APP_VERSION);
+#else
+	UnusedParam(updateFiles);
+#endif
 
 	return trueblnr;
 }
@@ -3552,9 +3634,11 @@ LOCALPROC UnInitOSGLU(void)
 
 	CheckSavedMacMsg();
 
+#ifndef MV_LAUNCHER
 	if (WIIUPDATE_INSTALL_DOWNLOADING != WIIUPDATE_InstallState()) {
 		WIIUPDATE_Cancel();
 	}
+#endif
 
 	INPUT_Shutdown();
 	Screen_UnInit();
