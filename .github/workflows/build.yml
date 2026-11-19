@@ -2,7 +2,9 @@ name: Build
 
 on:
   push:
-    tags-ignore: [latest]
+    # With only a tags filter GitHub skips branch pushes, so list both.
+    branches: ['**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
