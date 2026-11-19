@@ -104,6 +104,18 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: out
+      # Setup instructions for the release page: .github/RELEASE_NOTES.md
+      # with the version filled in (and, for latest, the commit it is from).
+      - name: Write release notes
+        run: |
+          ver=$(basename out/MinivMacWii-*-hbc.zip | sed -e 's/^MinivMacWii-//' -e 's/-hbc\.zip$//')
+          {
+            if [ "$GITHUB_REF_TYPE" != tag ]; then
+              echo "Latest build ($ver) of ${GITHUB_SHA::7}, rebuilt on every push. Tagged versions are under [Releases](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases)."
+              echo
+            fi
+            sed "s/<version>/$ver/g" .github/RELEASE_NOTES.md
+          } > notes.md
       # Start the latest release afresh so files a build no longer makes
       # do not linger on it.
       - name: Move the latest tag
@@ -123,15 +135,10 @@ jobs:
           prerelease: false
           make_latest: true
           fail_on_unmatched_files: true
-          body: |
-            Latest build of Mini vMac Wii from ${{ github.sha }}.
-
-            Wii: extract MinivMacWii-*-hbc.zip to the root of your SD card or USB drive and put your ROMs in sd:/apps/MinivMacWii/: Mac128K.ROM, vMac.ROM (512Ke and Plus), MacSE.ROM, Classic.ROM, MacII.ROM, MacIIx.ROM. Open Mini vMac Wii from the Homebrew Channel and pick the Mac.
-
-            Wii U (Aroma): extract MinivMacWiiU-*-wiiu.zip and/or MinivMacWiiUII-*-wiiu.zip to the root of your SD card, put the ROM in sd:/wiiu/apps/MinivMacWiiU/ (or MinivMacWiiUII) and open it from the Wii U Menu.
+          body_path: notes.md
           files: out/*.zip
-      # The updater installs the first app folder of the zip it picks, so the
-      # Wii U II zip goes on <repo>-ii.
+      # libwiiuupdate installs the first Wii U zip of a release, so the Wii U
+      # II zip stays off the version releases (it goes on <repo>-ii).
       - name: Publish tagged release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
@@ -140,10 +147,7 @@ jobs:
           make_latest: false
           generate_release_notes: true
           fail_on_unmatched_files: true
-          body: |
-            Wii: extract MinivMacWii-*-hbc.zip to the root of your SD card or USB drive and put your ROMs in sd:/apps/MinivMacWii/: Mac128K.ROM, vMac.ROM (512Ke and Plus), MacSE.ROM, Classic.ROM, MacII.ROM, MacIIx.ROM. Open Mini vMac Wii from the Homebrew Channel and pick the Mac.
-
-            Wii U (Aroma): extract MinivMacWiiU-*-wiiu.zip to the root of your SD card, put vMac.ROM in sd:/wiiu/apps/MinivMacWiiU/ and open Mini vMac Wii U from the Wii U Menu.
+          body_path: notes.md
           files: |
             out/MinivMacWii-*-hbc.zip
             out/MinivMacWiiU-*-wiiu.zip
