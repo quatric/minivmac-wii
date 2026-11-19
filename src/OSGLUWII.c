@@ -413,6 +413,13 @@ enum {
 LOCALVAR int ScaleMode = kScaleFill;
 LOCALVAR blnr Smoothing = trueblnr;
 
+/* HOME menu sound volume: 0 = off, kNumSoundLevels - 1 = full */
+#define kNumSoundLevels 5
+LOCALVAR int SoundLevel = kNumSoundLevels - 1;
+#if MySoundEnabled
+LOCALPROC MySound_ApplyVolume(void);
+#endif
+
 /* where the Mac screen is drawn, in virtual coordinates */
 LOCALVAR f32 DispX = 0;
 LOCALVAR f32 DispY = 0;
@@ -1910,6 +1917,7 @@ enum {
 	kMenuDisplay,
 	kMenuSmoothing,
 	kMenuSpeed,
+	kMenuSound,
 	kMenuType,
 	kMenuKeyboard,
 	kMenuInterrupt,
@@ -1923,9 +1931,9 @@ LOCALVAR int MenuSel = 0;
 LOCALVAR blnr SettingsChanged = falseblnr;
 
 #define MenuW 440.0f
-#define MenuItemH 26.0f
+#define MenuItemH 24.0f
 #define MenuX ((VirtW - MenuW) / 2)
-#define MenuY 60.0f
+#define MenuY 44.0f
 #define MenuItemsY (MenuY + 40)
 
 LOCALVAR const ui3b SpeedValues[] = { 0, 1, 2, 3, 4, 5, (ui3b)-1 };
@@ -1959,6 +1967,14 @@ LOCALPROC MenuItemText(int i, char *buf, size_t n)
 			break;
 		case kMenuSpeed:
 			snprintf(buf, n, "Speed:  < %s >", SpeedName());
+			break;
+		case kMenuSound:
+			if (0 == SoundLevel) {
+				snprintf(buf, n, "Sound:  < Off >");
+			} else {
+				snprintf(buf, n, "Sound:  < %d%% >",
+					(100 * SoundLevel) / (kNumSoundLevels - 1));
+			}
 			break;
 		case kMenuType:
 			snprintf(buf, n, "Type text...");
@@ -2029,6 +2045,14 @@ LOCALPROC MenuChange(int dir)
 		case kMenuSpeed:
 			CycleSpeed(dir);
 			break;
+		case kMenuSound:
+			SoundLevel = (SoundLevel + dir + kNumSoundLevels)
+				% kNumSoundLevels;
+#if MySoundEnabled
+			MySound_ApplyVolume();
+#endif
+			SettingsChanged = trueblnr;
+			break;
 		default:
 			break;
 	}
@@ -2044,6 +2068,7 @@ LOCALPROC MenuActivate(void)
 		case kMenuDisplay:
 		case kMenuSmoothing:
 		case kMenuSpeed:
+		case kMenuSound:
 			MenuChange(1);
 			break;
 		case kMenuType:
@@ -2276,6 +2301,9 @@ LOCALPROC LoadSettings(void)
 			ScaleMode = ((v >= 0) && (v < kNumScales)) ? v : kScaleFill;
 		} else if (1 == sscanf(line, "smoothing=%d", &v)) {
 			Smoothing = (0 != v);
+		} else if (1 == sscanf(line, "sound=%d", &v)) {
+			SoundLevel = ((v >= 0) && (v < kNumSoundLevels))
+				? v : kNumSoundLevels - 1;
 		} else if (1 == sscanf(line, "speed=%d", &v)) {
 			SpeedValue = (v < 0) ? (ui3b)-1 : (ui3b)v;
 		}
@@ -2295,9 +2323,9 @@ LOCALPROC SaveSettings(void)
 	}
 	f = fopen(SettingsFile, "w");
 	if (NULL != f) {
-		fprintf(f, "display=%d\nsmoothing=%d\nspeed=%d\n", ScaleMode,
-			Smoothing ? 1 : 0,
-			(SpeedValue == (ui3b)-1) ? -1 : (int)SpeedValue);
+		fprintf(f, "display=%d\nsmoothing=%d\nspeed=%d\nsound=%d\n",
+			ScaleMode, Smoothing ? 1 : 0,
+			(SpeedValue == (ui3b)-1) ? -1 : (int)SpeedValue, SoundLevel);
 		fclose(f);
 	}
 }
@@ -2983,12 +3011,37 @@ LOCALVAR blnr HaveSoundOut = falseblnr;
 
 #define SOUND_SAMPLERATE 22255 /* = round(7833600 * 2 / 704) */
 
-/* ASND double-buffers each voice: while one buffer plays, the callback
-   queues the next. */
+/*
+	ASND double-buffers each voice: while one buffer plays, the callback
+	queues the next. The Mac's 8-bit unsigned samples are converted to
+	16-bit signed big-endian here; ASND's unsigned 8-bit voice format
+	clicks at buffer boundaries (one full-scale sample every other buffer).
+*/
 #define SndOutSamples 1024
-#define SndOutBytes (SndOutSamples << (kLn2SoundSampSz - 3))
-LOCALVAR ui3b SndOut[2][SndOutBytes] ATTRIBUTE_ALIGN(32);
+#define SndOutBytes (SndOutSamples * 2)
+LOCALVAR s16 SndOut[2][SndOutSamples] ATTRIBUTE_ALIGN(32);
+LOCALVAR tbSoundSamp SndRaw[SndOutSamples];
 LOCALVAR volatile int SndOutCur = 0;
+
+LOCALFUNC s32 SoundLevelVolume(void)
+{
+	return (MAX_VOLUME * SoundLevel) / (kNumSoundLevels - 1);
+}
+
+LOCALPROC SndFillOut(s16 *out)
+{
+	int i;
+
+	my_audio_callback(&cur_audio, (ui3p)SndRaw, SndOutSamples);
+	for (i = 0; i < SndOutSamples; ++i) {
+#if 3 == kLn2SoundSampSz
+		out[i] = (s16)(((int)SndRaw[i] - 0x80) << 8);
+#else
+		out[i] = (s16)((int)SndRaw[i] - 0x8000);
+#endif
+	}
+	DCFlushRange(out, SndOutBytes);
+}
 
 static void SndVoiceCallback(s32 voice)
 {
@@ -2996,11 +3049,19 @@ static void SndVoiceCallback(s32 voice)
 		return;
 	}
 
-	my_audio_callback(&cur_audio, SndOut[SndOutCur], SndOutSamples);
-	DCFlushRange(SndOut[SndOutCur], SndOutBytes);
+	SndFillOut(SndOut[SndOutCur]);
 
 	if (SND_OK == ASND_AddVoice(voice, SndOut[SndOutCur], SndOutBytes)) {
 		SndOutCur ^= 1;
+	}
+}
+
+LOCALPROC MySound_ApplyVolume(void)
+{
+	if (HaveSoundOut) {
+		s32 v = SoundLevelVolume();
+
+		ASND_ChangeVolumeVoice(0, v, v);
 	}
 }
 
@@ -3040,11 +3101,7 @@ LOCALPROC MySound_UnInit(void)
 
 LOCALFUNC blnr MySound_Init(void)
 {
-#if 3 == kLn2SoundSampSz
-	const s32 format = VOICE_MONO_8BIT_U;
-#else
-	const s32 format = VOICE_MONO_16BIT;
-#endif
+	s32 v = SoundLevelVolume();
 
 	MySound_Init0();
 
@@ -3061,12 +3118,11 @@ LOCALFUNC blnr MySound_Init(void)
 	HaveSoundOut = trueblnr;
 
 	/* start from silence; the callback keeps the voice fed */
-	my_audio_callback(&cur_audio, SndOut[0], SndOutSamples);
-	DCFlushRange(SndOut[0], SndOutBytes);
+	SndFillOut(SndOut[0]);
 	SndOutCur = 1;
 
-	if (SND_OK != ASND_SetVoice(0, format, SOUND_SAMPLERATE, 0,
-		SndOut[0], SndOutBytes, MAX_VOLUME, MAX_VOLUME, SndVoiceCallback))
+	if (SND_OK != ASND_SetVoice(0, VOICE_MONO_16BIT_BE, SOUND_SAMPLERATE, 0,
+		SndOut[0], SndOutBytes, v, v, SndVoiceCallback))
 	{
 		ASND_End();
 		HaveSoundOut = falseblnr;

@@ -15,6 +15,12 @@ TVs alike.
   at start the app checks the GitHub releases in the background and, when a
   newer one is out, offers to install it over itself.
 
+* **Sound** plays through ASND: the Macintosh Plus sound buffer and the
+  Macintosh II's Apple Sound Chip (startup chime included) at 22255 Hz.
+  HOME > *Sound* sets the volume (off, 25% ... 100%). As in every Mini vMac
+  build, sound is only right at 1x; at higher speeds the emulator drops back
+  to 1x on its own while the Mac is idle.
+
 Two builds:
 
 | Model | HBC folder | ROM | Screen |
@@ -44,7 +50,7 @@ No ROM? The app starts anyway and HOME > *Load ROM...* picks one.
 | 2 | option |
 | + | type text (libwiiosk keyboard); while text is being typed, + stops it |
 | - | display mode: fill screen / keep aspect / integer scale |
-| HOME | menu: insert disk, display, smoothing, speed, type text, Mac keyboard, interrupt, reset, quit |
+| HOME | menu: insert disk, display, smoothing, speed, sound, type text, Mac keyboard, interrupt, reset, quit |
 | Nunchuk / Classic / GameCube stick | move the mouse |
 
 A Classic Controller or GameCube pad works through the same layout (on a
@@ -72,7 +78,7 @@ held modifiers), HOME > *Show Mac keyboard* puts a Mac keyboard over the
 screen. Point and press A. Shift, option, command and ctrl apply to the next
 key; caps locks. + hides it again.
 
-Display mode, smoothing and speed are saved to `settings.txt` in the app
+Display mode, smoothing, speed and sound volume are saved to `settings.txt` in the app
 folder. The power button (console or Wii Remote) turns the Wii off, the reset
 button returns to the loader.
 
@@ -98,11 +104,24 @@ picks, so each model is released from its own repository: publish
 `MinivMacWii-<version>-hbc.zip` on `UPDATE_REPO` and
 `MinivMacWiiII-<version>-hbc.zip` on `UPDATE_REPO_II`.
 
+### Testing in Dolphin
+
+`scripts/dolphin-test.sh` boots a build in Dolphin from a virtual SD card
+(needs mtools), dumps the audio and optionally the frames, and stops Dolphin:
+
+```sh
+SECONDS_RUN=40 FRAMES=True scripts/dolphin-test.sh II out MacII.ROM disk1.dsk
+# out/dsp.wav: what the Wii played, out/frames/: the screen
+```
+
+Build with `EXTRA_CFLAGS=-DTEST_SHOW_UI` to open the HOME menu and the Mac
+keyboard from the start.
+
 ### CI
 
 `.github/workflows/build.yml` builds both models in the `devkitpro/devkitppc`
 container on every push and pull request and uploads the HBC zips as
-artifacts. Pushes to the default branch refresh a rolling `latest` release
+artifacts. Pushes (and manual runs) on the default branch refresh a rolling `latest` release
 (the updater ignores that tag). A `v1.2.0` tag builds version 1.2.0 and
 releases the Plus zip on this repository; with an `II_RELEASE_TOKEN` secret
 (a token that can write to `<owner>/<repo>-ii`, which needs at least one
