@@ -79,7 +79,6 @@ typedef unsigned long long ui6b;
 #define kLn2SoundSampSz 3
 
 #define dbglog_HAVE 0
-#define dbglog_buflnsz 131072
 #define WantAbnormalReports 0
 
 #define NumDrives 6

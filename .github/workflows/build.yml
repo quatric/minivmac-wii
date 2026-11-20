@@ -49,10 +49,6 @@ jobs:
   wiiu:
     runs-on: ubuntu-24.04
     container: devkitpro/devkitppc:latest
-    strategy:
-      fail-fast: false
-      matrix:
-        model: [Plus, II]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,16 +61,16 @@ jobs:
       - name: Build and package
         shell: bash
         run: |
-          args=(MODEL=${{ matrix.model }} UPDATE_OWNER="$UPDATE_OWNER" UPDATE_REPO="$UPDATE_REPO")
+          args=(UPDATE_OWNER="$UPDATE_OWNER" UPDATE_REPO="$UPDATE_REPO")
           if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" == v* ]]; then
             args+=(VERSION="${GITHUB_REF_NAME#v}")
           fi
           make -C wiiu libs
           make -C wiiu -j"$(nproc)" "${args[@]}"
-          make -C wiiu "${args[@]}" dist-model
+          make -C wiiu "${args[@]}" dist
       - uses: actions/upload-artifact@v7
         with:
-          name: release-wiiu-${{ matrix.model }}
+          name: release-wiiu
           if-no-files-found: error
           path: wiiu/dist/*.zip
 
@@ -93,10 +89,6 @@ jobs:
     concurrency:
       group: release-${{ github.repository }}
       cancel-in-progress: false
-    env:
-      # Optional: a token with contents:write on <owner>/<repo>-ii, so the
-      # Wii U Macintosh II build is released where its updater looks.
-      II_TOKEN: ${{ secrets.II_RELEASE_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -137,8 +129,6 @@ jobs:
           fail_on_unmatched_files: true
           body_path: notes.md
           files: out/*.zip
-      # libwiiuupdate installs the first Wii U zip of a release, so the Wii U
-      # II zip stays off the version releases (it goes on <repo>-ii).
       - name: Publish tagged release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
@@ -151,19 +141,3 @@ jobs:
           files: |
             out/MinivMacWii-*-hbc.zip
             out/MinivMacWiiU-*-wiiu.zip
-      - name: Publish tagged Macintosh II release
-        if: github.ref_type == 'tag' && env.II_TOKEN != ''
-        uses: softprops/action-gh-release@v3
-        with:
-          repository: ${{ github.repository }}-ii
-          token: ${{ env.II_TOKEN }}
-          tag_name: ${{ github.ref_name }}
-          name: Mini vMac Wii U II ${{ github.ref_name }}
-          make_latest: true
-          fail_on_unmatched_files: true
-          body: |
-            Built from ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}.
-
-            Wii U (Aroma): extract MinivMacWiiUII-*-wiiu.zip to the root of your SD card, put MacII.ROM in sd:/wiiu/apps/MinivMacWiiUII/ and open Mini vMac Wii U II from the Wii U Menu.
-          files: |
-            out/MinivMacWiiUII-*-wiiu.zip

@@ -5,8 +5,7 @@ Mini vMac, the classic Macintosh emulator, for the Wii (Homebrew Channel) and th
 | File | Console | Macs |
 |------|---------|------|
 | `MinivMacWii-<version>-hbc.zip` | Wii, or a Wii U in Wii mode | 128K, 512Ke, Plus, SE, Classic, II, IIx (one app, pick at start) |
-| `MinivMacWiiU-<version>-wiiu.zip` | Wii U with Aroma | Plus |
-| `MinivMacWiiUII-<version>-wiiu.zip` | Wii U with Aroma | II (on the [latest build](https://github.com/quatric/minivmac-wii/releases/tag/latest)) |
+| `MinivMacWiiU-<version>-wiiu.zip` | Wii U with Aroma | 128K, 512Ke, Plus, SE, Classic, II, IIx (one app, pick at start) |
 
 ## You will need
 
@@ -59,10 +58,11 @@ Nunchuk, Classic Controller, GameCube controllers, USB keyboards and USB mice wo
 
 ## Wii U setup (Aroma)
 
-1. Unzip `MinivMacWiiU-<version>-wiiu.zip` (Macintosh Plus) and/or `MinivMacWiiUII-<version>-wiiu.zip` (Macintosh II) to the root of the SD card.
-2. Copy `vMac.ROM` into `sd:/wiiu/apps/MinivMacWiiU/`, or `MacII.ROM` into `sd:/wiiu/apps/MinivMacWiiUII/`.
-3. Put `disk1.dsk`, `disk2.dsk`, ... next to the ROM.
-4. Open Mini vMac from the Wii U Menu. Touch the GamePad screen to move the mouse and click; HOME opens the emulator's menu.
+1. Unzip `MinivMacWiiU-<version>-wiiu.zip` to the root of the SD card. You get `wiiu/apps/MinivMacWiiU/`, with one empty folder per Mac inside it (`128K`, `512Ke`, `Plus`, `SE`, `Classic`, `II`, `IIx`).
+2. Copy your ROMs into `sd:/wiiu/apps/MinivMacWiiU/` (or into the model's folder, e.g. `II/MacII.ROM`).
+3. Put `disk1.dsk`, `disk2.dsk`, ... in the model's folder, e.g. `II/disk1.dsk`. Images in `MinivMacWiiU/` itself are used by every model that has none of its own.
+4. Open **Mini vMac Wii U** from the Wii U Menu. The list shows which ROMs were found; the Mac you used last starts after three seconds, or pick another with the D-Pad, a pointer or the GamePad's touch screen. With a single ROM it starts straight away.
+5. Touch the GamePad screen to move the mouse and click; HOME opens the emulator's menu, which has *Switch Mac model...*.
 
 ## Tips
 

@@ -67,6 +67,24 @@
 #define APP_TITLE "Mini vMac Wii U"
 #endif
 
+/*
+	MV_LAUNCHER: this copy of the glue is one model inside the all-in-one
+	app (wiiu/launcher.c). Its globals are renamed per model at link time,
+	main becomes the model's entry point, and the launcher owns the
+	controllers, SDL, the window and the choice of model. MODEL_DIR is the
+	model's own folder in the app folder (its ROM and disk images are looked
+	for there first).
+*/
+#ifdef MV_LAUNCHER
+#include "launcher.h"
+#endif
+
+#ifdef MAC_NAME
+#define MENU_TITLE APP_TITLE " " APP_VERSION " - " MAC_NAME
+#else
+#define MENU_TITLE APP_TITLE " " APP_VERSION
+#endif
+
 /* Virtual screen used for all drawing and for the pointer: 16:9 with
    square pixels. SDL scales it onto the TV and the GamePad. */
 #define VirtW 854
@@ -318,6 +336,16 @@ LOCALFUNC blnr Sony_InsertIth(int i)
 
 		s[4] = '0' + i;
 
+#ifdef MODEL_DIR
+		{
+			char ms[64];
+
+			snprintf(ms, sizeof(ms), MODEL_DIR "/%s", s);
+			if (Sony_Insert1(ms, trueblnr)) {
+				return trueblnr;
+			}
+		}
+#endif
 		v = Sony_Insert1(s, trueblnr);
 	}
 
@@ -344,6 +372,9 @@ LOCALVAR char *rom_path = NULL;
 LOCALFUNC blnr LoadMacRom(void)
 {
 	static const char *const dirs[] = {
+#ifdef MODEL_DIR
+		MODEL_DIR "/",
+#endif
 		"", "fs:/vol/external01/minivmac/", "fs:/vol/external01/"
 	};
 	char path[256];
@@ -662,6 +693,10 @@ LOCALFUNC blnr BuildFontTexture(void)
 
 LOCALFUNC blnr Screen_Init(void)
 {
+#ifdef MV_LAUNCHER
+	MyWindow = MVL_Window();
+	MyRenderer = MVL_Renderer();
+#else
 	/* One window: SDL shows it on the TV and on the GamePad. */
 	MyWindow = SDL_CreateWindow(APP_TITLE, SDL_WINDOWPOS_UNDEFINED,
 		SDL_WINDOWPOS_UNDEFINED, 1280, 720, 0);
@@ -670,6 +705,7 @@ LOCALFUNC blnr Screen_Init(void)
 	}
 	MyRenderer = SDL_CreateRenderer(MyWindow, -1,
 		SDL_RENDERER_ACCELERATED);
+#endif
 	if (NULL == MyRenderer) {
 		return falseblnr;
 	}
@@ -715,14 +751,17 @@ LOCALPROC Screen_UnInit(void)
 		SDL_DestroyTexture(ScreenTex);
 		ScreenTex = NULL;
 	}
+#ifndef MV_LAUNCHER
 	if (NULL != MyRenderer) {
 		SDL_DestroyRenderer(MyRenderer);
-		MyRenderer = NULL;
 	}
 	if (NULL != MyWindow) {
 		SDL_DestroyWindow(MyWindow);
-		MyWindow = NULL;
 	}
+#endif
+	/* with the launcher they stay: it shows the next picture */
+	MyRenderer = NULL;
+	MyWindow = NULL;
 }
 
 /* --- immediate mode drawing helpers --- */
@@ -1852,6 +1891,9 @@ enum {
 	kMenuKeyboard,
 	kMenuInterrupt,
 	kMenuReset,
+#ifdef MV_LAUNCHER
+	kMenuModel,
+#endif
 	kMenuQuit,
 	kMenuResume,
 	kNumMenuItems
@@ -1861,7 +1903,11 @@ LOCALVAR int MenuSel = 0;
 LOCALVAR blnr SettingsChanged = falseblnr;
 
 #define MenuW 440.0f
+#ifdef MV_LAUNCHER
+#define MenuItemH 24.0f
+#else
 #define MenuItemH 26.0f
+#endif
 #define MenuX ((VirtW - MenuW) / 2)
 #define MenuY 60.0f
 #define MenuItemsY (MenuY + 40)
@@ -1911,6 +1957,11 @@ LOCALPROC MenuItemText(int i, char *buf, size_t n)
 		case kMenuReset:
 			snprintf(buf, n, "Reset the Mac");
 			break;
+#ifdef MV_LAUNCHER
+		case kMenuModel:
+			snprintf(buf, n, "Switch Mac model...");
+			break;
+#endif
 		case kMenuQuit:
 			snprintf(buf, n, "Quit to loader");
 			break;
@@ -2004,6 +2055,13 @@ LOCALPROC MenuActivate(void)
 			WantMacReset = trueblnr;
 			MenuClose();
 			break;
+#ifdef MV_LAUNCHER
+		case kMenuModel:
+			MenuClose();
+			MVL_RequestSwitch();
+			RequestMacOff = trueblnr;
+			break;
+#endif
 		case kMenuQuit:
 			MenuClose();
 			ForceMacOff = trueblnr;
@@ -2036,7 +2094,7 @@ LOCALPROC DrawMenu(void)
 	FillRect(MenuX, MenuY, MenuW, h, RGBA(235, 235, 240, 245));
 	FrameRect(MenuX, MenuY, MenuW, h, 2, RGBA(0, 0, 0, 255));
 	FillRect(MenuX, MenuY, MenuW, 26, RGBA(0, 0, 0, 255));
-	DrawTextCentered(VirtW / 2, MenuY + 5, APP_TITLE " " APP_VERSION,
+	DrawTextCentered(VirtW / 2, MenuY + 5, MENU_TITLE,
 		RGBA(255, 255, 255, 255));
 
 	for (i = 0; i < kNumMenuItems; ++i) {
@@ -3320,7 +3378,9 @@ LOCALFUNC blnr InitWiiUSystem(void)
 
 	/* before SDL: the USB keyboard library takes one client, and the
 	   keyboard is libwiiuinput's (SDL carries on without it) */
+#ifndef MV_LAUNCHER
 	INPUT_Init();
+#endif
 	INPUT_SetScreenSize(VirtW, VirtH);
 	INPUT_SetCursorMode(INPUT_CURSOR_IR | INPUT_CURSOR_MOUSE
 		| INPUT_CURSOR_TOUCH);
@@ -3328,12 +3388,14 @@ LOCALFUNC blnr InitWiiUSystem(void)
 	INPUT_SetTouchButton(WPAD_BUTTON_A);
 	/* the keyboard is a Mac keyboard here, not a controller */
 	INPUT_KeyboardMapClear();
+#ifndef MV_LAUNCHER
 	/* HOME opens the emulator's menu, which can quit */
 	OSEnableHomeButtonMenu(FALSE);
 
 	if (0 != SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
 		return falseblnr;
 	}
+#endif
 
 	InitHidMap();
 	InitKeyCodes();
@@ -3397,8 +3459,14 @@ LOCALPROC UnInitOSGLU(void)
 	WIIUUPDATE_Shutdown();
 
 	Screen_UnInit();
+#ifdef MV_LAUNCHER
+	if (ShutdownRequested) {
+		MVL_RequestQuit();
+	}
+#else
 	OSEnableHomeButtonMenu(TRUE);
 	INPUT_Shutdown();
+#endif
 }
 
 int main(int argc, char **argv)
@@ -3412,8 +3480,10 @@ int main(int argc, char **argv)
 	}
 	UnInitOSGLU();
 
+#ifndef MV_LAUNCHER
 	/* SDL hands the app back to ProcUI and the Wii U Menu */
 	SDL_Quit();
+#endif
 
 	return 0;
 }

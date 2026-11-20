@@ -5,7 +5,8 @@ the Nintendo Wii and Wii U:
 
 * [wii/README.md](wii/README.md): Homebrew Channel (libogc, GX), one app
   with every model: Macintosh 128K, 512Ke, Plus, SE, Classic, II and IIx
-* [wiiu/README.md](wiiu/README.md): Aroma (wut, SDL2)
+* [wiiu/README.md](wiiu/README.md): Aroma (wut, SDL2), one app with the
+  same seven models
 
 Both type text through [libwiiosk](https://github.com/quatric/libwiiosk), the
 Wii-style software keyboard: press + and type.
