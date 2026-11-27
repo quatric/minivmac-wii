@@ -3510,10 +3510,8 @@ static void PowerButtonCallback(void)
 	ShutdownRequested = trueblnr;
 }
 
-static void ResetButtonCallback(u32 irq, void *ctx)
+static void ResetButtonCallback(void)
 {
-	UnusedParam(irq);
-	UnusedParam(ctx);
 	ResetRequested = trueblnr;
 }
 

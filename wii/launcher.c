@@ -98,10 +98,8 @@ static void WiimotePowerCallback(s32 chan)
 	PowerOff = 1;
 }
 
-static void ResetCallback(u32 irq, void *ctx)
+static void ResetCallback(void)
 {
-	(void)irq;
-	(void)ctx;
 	ResetPressed = 1;
 }
 

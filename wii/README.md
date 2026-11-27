@@ -97,7 +97,7 @@ Wii Remote) turns the Wii off, the reset button returns to the loader.
 
 ## Building
 
-Needs devkitPPC and libogc.
+Needs devkitPPC and libogc2.
 
 ```sh
 git submodule update --init
